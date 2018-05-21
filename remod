@@ -1,0 +1,18 @@
+#sync paranoia might be useful
+
+arch=`rtai-config --arch`
+rmmod=/sbin/rmmod
+
+sync
+$rmmod rtai_shm
+sync
+$rmmod rtai_msg
+sync
+$rmmod rtai_mbx
+sync
+$rmmod rtai_sem
+sync
+$rmmod rtai_sched
+sync
+$rmmod rtai_hal
+sync
