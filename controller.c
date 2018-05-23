@@ -133,7 +133,12 @@ static void * control_loop(void * par) {
 
 		if (error > 0) control_action = 1;
 		else if (error < 0){
-			if ((*reference) == 0) control_action = 4; //ABS
+			control_action = 3;
+			if ((*reference) == 0){
+			 control_action = 3;
+			sleep(1); 
+			 control_action = 4;
+				}		//ABS
 			else control_action = 2;
 			}
 		else control_action = 3;
@@ -215,7 +220,7 @@ int main(void)
 
 	while (keep_on_running) {
 		//for (int i=0; i < NUM_OF_WHEELS; i++) {
-			printf("Control: %d\n",(*actuator));
+			printf("Control 1: %d\n",(*actuator));
 		//}
 		rt_sleep(10000000);
 	}
