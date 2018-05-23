@@ -35,7 +35,7 @@ int* sensor;
 int* actuator;
 int* reference;
 
-int buffer[BUF_SIZE];
+int buffer2[BUF_SIZE];
 int head = 0;
 int tail = 0;
 
@@ -43,7 +43,7 @@ SEM* space_avail;
 SEM* meas_avail;
 
 
-static void * acquire_loop(void * par) {
+static void * acquire_loop2(void * par) {
 	
 	if (!(read_Task = rt_task_init_schmod(nam2num("READER"), 1, 0, 0, SCHED_FIFO, CPUMAP))) {
 		printf("CANNOT INIT SENSOR TASK\n");
@@ -59,7 +59,7 @@ static void * acquire_loop(void * par) {
 		// DATA ACQUISITION FROM PLANT
 		rt_sem_wait(space_avail);
 		
-		buffer[head] = (*sensor);
+		buffer2[head] = (*sensor);
 		head = (head+1) % BUF_SIZE;
 
 		rt_sem_signal(meas_avail);
@@ -70,7 +70,7 @@ static void * acquire_loop(void * par) {
 	return 0;
 }
 
-static void * filter_loop(void * par) {
+static void * filter_loop2(void * par) {
 
 	if (!(filter_Task = rt_task_init_schmod(nam2num("FILTER"), 2, 0, 0, SCHED_FIFO, CPUMAP))) {
 		printf("CANNOT INIT FILTER TASK\n");
@@ -89,7 +89,7 @@ static void * filter_loop(void * par) {
 		// FILTERING (average)
 		rt_sem_wait(meas_avail);
 
-		sum += buffer[tail];
+		sum += buffer2[tail];
 		tail = (tail+1) % BUF_SIZE;
 
 		rt_sem_signal(space_avail);
@@ -109,7 +109,7 @@ static void * filter_loop(void * par) {
 	return 0;
 }
 
-static void * control_loop(void * par) {
+static void * control_loop2(void * par) {
 
 	if (!(control_Task = rt_task_init_schmod(nam2num("CONTROL"), 3, 0, 0, SCHED_FIFO, CPUMAP))) {
 		printf("CANNOT INIT CONTROL TASK\n");
@@ -148,7 +148,7 @@ static void * control_loop(void * par) {
 	return 0;
 }
 
-static void * actuator_loop(void * par) {
+static void * actuator_loop2(void * par) {
 
 	if (!(write_Task = rt_task_init_schmod(nam2num("WRITE"), 4, 0, 0, SCHED_FIFO, CPUMAP))) {
 		printf("CANNOT INIT ACTUATOR TASK\n");
@@ -205,17 +205,17 @@ int main(void)
 	sampl_interv = nano2count(CNTRL_TIME);
 	
 	// CONTROL THREADS 
-	pthread_create(&read_thread, NULL, acquire_loop, NULL);
-	pthread_create(&filter_thread, NULL, filter_loop, NULL);
+	pthread_create(&read_thread, NULL, acquire_loop2, NULL);
+	pthread_create(&filter_thread, NULL, filter_loop2, NULL);
 	//for (int i=0;i<NUM_WHEELS;i++){
-		pthread_create(&control_thread, NULL, control_loop, NULL);
+		pthread_create(&control_thread, NULL, control_loop2, NULL);
 	//}
 	//pthread_create(&control_thread2, NULL, control_loop, NULL);
-	pthread_create(&write_thread, NULL, actuator_loop, NULL);
+	pthread_create(&write_thread, NULL, actuator_loop2, NULL);
 
 	while (keep_on_running) {
 		//for (int i=0; i < NUM_OF_WHEELS; i++) {
-			printf("Control: %d\n",(*actuator));
+			printf("Control 1: %d\n",(*actuator));
 		//}
 		rt_sleep(10000000);
 	}
