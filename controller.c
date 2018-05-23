@@ -215,7 +215,7 @@ int main(void)
 
 	while (keep_on_running) {
 		//for (int i=0; i < NUM_OF_WHEELS; i++) {
-			printf("Control: %d\n",(*actuator));
+			printf("Control 0: %d\n",(*actuator));
 		//}
 		rt_sleep(10000000);
 	}

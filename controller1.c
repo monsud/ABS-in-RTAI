@@ -59,7 +59,7 @@ static void * acquire_loop2(void * par) {
 		// DATA ACQUISITION FROM PLANT
 		rt_sem_wait(space_avail);
 		
-		buffer2[head] = (*sensor);
+		buffer2[head] = sensor[1];
 		head = (head+1) % BUF_SIZE;
 
 		rt_sem_signal(meas_avail);
@@ -174,7 +174,7 @@ static void * actuator_loop2(void * par) {
 			default: cntr = 0;
 		}
 		
-		(*actuator) = cntr;
+		actuator[1] = cntr;
 
 		rt_task_wait_period();
 	}
@@ -215,7 +215,7 @@ int main(void)
 
 	while (keep_on_running) {
 		//for (int i=0; i < NUM_OF_WHEELS; i++) {
-			printf("Control 1: %d\n",(*actuator));
+			printf("Control 1: %d\n",actuator[1]);
 		//}
 		rt_sleep(10000000);
 	}
