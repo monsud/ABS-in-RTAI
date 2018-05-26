@@ -1,4 +1,4 @@
-//------------------- CONTROLLER_1.C ---------------------- 
+//------------------- CONTROLLER_2.C ---------------------- 
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,18 +19,18 @@
 static int state_1 = 0;
 static int state_2 = 0;
 
-static RT_TASK *main_Task1;
-static RT_TASK *read_Task1;
-static RT_TASK *filter_Task1;
-static RT_TASK *control_Task1;
-static RT_TASK *write_Task1;
+static RT_TASK *main_Task2;
+static RT_TASK *read_Task2;
+static RT_TASK *filter_Task2;
+static RT_TASK *control_Task2;
+static RT_TASK *write_Task2;
 
 static int keep_on_running = 1;
 
-static pthread_t read_thread1;
-static pthread_t filter_thread1;
-static pthread_t control_thread1;
-static pthread_t write_thread1;
+static pthread_t read_thread2;
+static pthread_t filter_thread2;
+static pthread_t control_thread2;
+static pthread_t write_thread2;
 static RTIME sampl_interv;
 
 static void endme(int dummy) {keep_on_running = 0;}
@@ -39,7 +39,7 @@ int* sensor;
 int* actuator;
 int* reference;
 
-int buffer1[BUF_SIZE];
+int buffer2[BUF_SIZE];
 int head = 0;
 int tail = 0;
 
@@ -50,13 +50,13 @@ MBX* msg_2;
 
 static void * acquire_loop(void * par) {
 	
-	if (!(read_Task1 = rt_task_init_schmod(nam2num("1 READER"), 1, 0, 0, SCHED_FIFO, CPUMAP))) {
-		printf("CANNOT INIT SENSOR TASK 1\n");
+	if (!(read_Task2 = rt_task_init_schmod(nam2num("2 READER"), 1, 0, 0, SCHED_FIFO, CPUMAP))) {
+		printf("CANNOT INIT SENSOR TASK 2\n");
 		exit(1);
 	}
 
 	RTIME expected = rt_get_time() + sampl_interv;
-	rt_task_make_periodic(read_Task1, expected, sampl_interv);
+	rt_task_make_periodic(read_Task2, expected, sampl_interv);
 	rt_make_hard_real_time();
 
 	while (keep_on_running)
@@ -64,26 +64,26 @@ static void * acquire_loop(void * par) {
 		// DATA ACQUISITION FROM PLANT
 		rt_sem_wait(space_avail);
 		
-		buffer1[head] = (sensor[0]);
+		buffer2[head] = (sensor[1]);
 		head = (head+1) % BUF_SIZE;
 
 		rt_sem_signal(meas_avail);
 
 		rt_task_wait_period();
 	}
-	rt_task_delete(read_Task1);
+	rt_task_delete(read_Task2);
 	return 0;
 }
 
 static void * filter_loop(void * par) {
 
-	if (!(filter_Task1 = rt_task_init_schmod(nam2num("FLTR 1"), 2, 0, 0, SCHED_FIFO, CPUMAP))) {
-		printf("CANNOT INIT FILTER TASK 1\n");
+	if (!(filter_Task2 = rt_task_init_schmod(nam2num("FLTR 2"), 2, 0, 0, SCHED_FIFO, CPUMAP))) {
+		printf("CANNOT INIT FILTER TASK 2\n");
 		exit(1);
 	}
 
 	RTIME expected = rt_get_time() + sampl_interv;
-	rt_task_make_periodic(filter_Task1, expected, sampl_interv);
+	rt_task_make_periodic(filter_Task2, expected, sampl_interv);
 	rt_make_hard_real_time();
 
 	int cnt = BUF_SIZE;
@@ -94,7 +94,7 @@ static void * filter_loop(void * par) {
 		// FILTERING (average)
 		rt_sem_wait(meas_avail);
 
-		sum += buffer1[tail];
+		sum += buffer2[tail];
 		tail = (tail+1) % BUF_SIZE;
 
 		rt_sem_signal(space_avail);
@@ -106,24 +106,24 @@ static void * filter_loop(void * par) {
 			avg = sum/BUF_SIZE;
 			sum = 0;
 			// sends the average measure to the controller
-			rt_send(control_Task1, avg);		
+			rt_send(control_Task2, avg);		
 		}
 		rt_task_wait_period();
 	}
-	rt_task_delete(filter_Task1);
+	rt_task_delete(filter_Task2);
 	return 0;
 }
 
 static void * control_loop(void * par) {
 
-	if (!(control_Task1 = rt_task_init_schmod(nam2num("CTRL 1"), 3, 0, 0, SCHED_FIFO, CPUMAP))) {
-		printf("CANNOT INIT CONTROL TASK 1\n");
+	if (!(control_Task2 = rt_task_init_schmod(nam2num("CTRL 2"), 3, 0, 0, SCHED_FIFO, CPUMAP))) {
+		printf("CANNOT INIT CONTROL TASK 2\n");
 		exit(1);
 	}
 
 	RTIME expected = rt_get_time() + sampl_interv;
 	RTIME delay = nano2count(DELAY_TIME);
-	rt_task_make_periodic(control_Task1, expected, BUF_SIZE*sampl_interv);
+	rt_task_make_periodic(control_Task2, expected, BUF_SIZE*sampl_interv);
 	rt_make_hard_real_time();
 
 	unsigned int plant_state = 0;
@@ -133,17 +133,17 @@ static void * control_loop(void * par) {
 	while (keep_on_running)
 	{
 		// receiving the average plant state from the filter
-		rt_receive(filter_Task1, &plant_state);
+		rt_receive(filter_Task2, &plant_state);
 		
 		if(*reference == 0){
 			// rilevazione del bloccaggio
 			if((plant_state == prev_plant_state) && (plant_state != 0)){
-				state_1 = 1;
-			} else state_1 = 0;
+				state_2 = 1;
+			} else state_2 = 0;
 			
-			rt_mbx_send_if(msg_1, (void *)&state_1, sizeof(int));
-		
-			rt_mbx_receive_timed(msg_2, (void *)&state_2, sizeof(int), delay);
+			rt_mbx_receive_timed(msg_1, (void *)&state_1, sizeof(int), delay);
+			
+			rt_mbx_send_if(msg_2, (void *)&state_2, sizeof(int));
 			
 			//printf("stato1: %d\tstato2: %d\n", stato_1, stato_2);
 			
@@ -163,24 +163,24 @@ static void * control_loop(void * par) {
 		state_2 = 0;
 		
 		// sending the control action to the actuator
-		rt_send(write_Task1, control_action);
+		rt_send(write_Task2, control_action);
 
 		rt_task_wait_period();
 
 	}
-	rt_task_delete(control_Task1);
+	rt_task_delete(control_Task2);
 	return 0;
 }
 
 static void * actuator_loop(void * par) {
 
-	if (!(write_Task1 = rt_task_init_schmod(nam2num("1 WRITE"), 4, 0, 0, SCHED_FIFO, CPUMAP))) {
-		printf("CANNOT INIT ACTUATOR TASK\n");
+	if (!(write_Task2 = rt_task_init_schmod(nam2num("2 WRITE"), 4, 0, 0, SCHED_FIFO, CPUMAP))) {
+		printf("CANNOT INIT ACTUATOR TASK 2\n");
 		exit(1);
 	}
 
 	RTIME expected = rt_get_time() + sampl_interv;
-	rt_task_make_periodic(write_Task1, expected, BUF_SIZE*sampl_interv);
+	rt_task_make_periodic(write_Task2, expected, BUF_SIZE*sampl_interv);
 	rt_make_hard_real_time();
 
 	unsigned int control_action = 0;
@@ -198,21 +198,21 @@ static void * actuator_loop(void * par) {
 			default: cntr = 0;
 		}
 		
-		(actuator[0]) = cntr;
+		(actuator[1]) = cntr;
 
 		rt_task_wait_period();
 	}
-	rt_task_delete(write_Task1);
+	rt_task_delete(write_Task2);
 	return 0;
 }
 
 int main(void)
 {
-	printf("The controller 1 is STARTED!\n");
+	printf("The controller 2 is STARTED!\n");
  	signal(SIGINT, endme);
 
-	if (!(main_Task1 = rt_task_init_schmod(nam2num("MNTK1"), 0, 0, 0, SCHED_FIFO, 0xF))) {
-		printf("CANNOT INIT MAIN TASK 1\n");
+	if (!(main_Task2 = rt_task_init_schmod(nam2num("MNTK2"), 0, 0, 0, SCHED_FIFO, 0xF))) {
+		printf("CANNOT INIT MAIN TASK 2\n");
 		exit(1);
 	}
 
@@ -223,22 +223,22 @@ int main(void)
 
 	(*reference) = 110;
 
-	space_avail = rt_typed_sem_init(SPACE_SEM, BUF_SIZE, CNT_SEM | PRIO_Q);
-	meas_avail = rt_typed_sem_init(MEAS_SEM, 0, CNT_SEM | PRIO_Q);
+	space_avail = rt_typed_sem_init(SPACE_SEM_2, BUF_SIZE, CNT_SEM | PRIO_Q);
+	meas_avail = rt_typed_sem_init(MEAS_SEM_2, 0, CNT_SEM | PRIO_Q);
 	msg_1 = rt_typed_named_mbx_init("msg1", MSG_SIZE, PRIO_Q);
 	msg_2 = rt_typed_named_mbx_init("msg2", MSG_SIZE, PRIO_Q);
 	
 	sampl_interv = nano2count(CNTRL_TIME);
 	
 	// CONTROL THREADS 
-	pthread_create(&read_thread1, NULL, acquire_loop, NULL);
-	pthread_create(&filter_thread1, NULL, filter_loop, NULL);
-	pthread_create(&control_thread1, NULL, control_loop, NULL);
-	pthread_create(&write_thread1, NULL, actuator_loop, NULL);
+	pthread_create(&read_thread2, NULL, acquire_loop, NULL);
+	pthread_create(&filter_thread2, NULL, filter_loop, NULL);
+	pthread_create(&control_thread2, NULL, control_loop, NULL);
+	pthread_create(&write_thread2, NULL, actuator_loop, NULL);
 
 	while (keep_on_running) {
-		//printf("Control: %d\tStato1: %d\tStato2: %d\n",(actuator[0]), stato_1, stato_2);
-		printf("Control: %d\n", (actuator[0]));
+		//printf("Control: %d\tStato1: %d\tStato2: %d\n",(actuator[1]), stato_1, stato_2);
+		printf("Control: %d\n", (actuator[1]));
 		rt_sleep(500000000);
 	}
 
@@ -249,7 +249,7 @@ int main(void)
 	rt_sem_delete(space_avail);
 	rt_named_mbx_delete(msg_1);
 	rt_named_mbx_delete(msg_2);
-	rt_task_delete(main_Task1);
- 	printf("The controller 1 is STOPPED\n");
+	rt_task_delete(main_Task2);
+ 	printf("The controller 2 is STOPPED\n");
 	return 0;
 }
