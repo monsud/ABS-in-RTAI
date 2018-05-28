@@ -18,12 +18,14 @@
 
 static int state_1 = 0;
 static int state_2 = 0;
+unsigned int heartbeat;
 
 static RT_TASK *main_Task2;
 static RT_TASK *read_Task2;
 static RT_TASK *filter_Task2;
 static RT_TASK *control_Task2;
 static RT_TASK *write_Task2;
+static RT_TASK *watchdog_Task2;
 
 static int keep_on_running = 1;
 
@@ -31,6 +33,7 @@ static pthread_t read_thread2;
 static pthread_t filter_thread2;
 static pthread_t control_thread2;
 static pthread_t write_thread2;
+static pthread_t watchdog_thread2;
 static RTIME sampl_interv;
 
 static void endme(int dummy) {keep_on_running = 0;}
@@ -116,6 +119,8 @@ static void * filter_loop(void * par) {
 
 static void * control_loop(void * par) {
 
+	RTIME now,ti;
+
 	if (!(control_Task2 = rt_task_init_schmod(nam2num("CTRL 2"), 3, 0, 0, SCHED_FIFO, CPUMAP))) {
 		printf("CANNOT INIT CONTROL TASK 2\n");
 		exit(1);
@@ -134,6 +139,8 @@ static void * control_loop(void * par) {
 	{
 		// receiving the average plant state from the filter
 		rt_receive(filter_Task2, &plant_state);
+
+		ti = rt_get_cpu_time_ns();
 		
 		if(*reference == 0){
 			// rilevazione del bloccaggio
@@ -145,7 +152,7 @@ static void * control_loop(void * par) {
 			
 			rt_mbx_send_if(msg_2, (void *)&state_2, sizeof(int));
 			
-			//printf("stato1: %d\tstato2: %d\n", stato_1, stato_2);
+			//printf("stato1: %d\tstato2: %d\n", state_1, state_2);
 			
 			// se una delle due ruote è bloccata, mollo il freno su entrambe
 			if((state_1 == 1) || (state_2 == 1) || (plant_state == 0)) control_action = 3;
@@ -164,6 +171,12 @@ static void * control_loop(void * par) {
 		
 		// sending the control action to the actuator
 		rt_send(write_Task2, control_action);
+
+		now = rt_get_cpu_time_ns();
+		
+		heartbeat = now-ti;
+
+		rt_send (watchdog_Task2,heartbeat);
 
 		rt_task_wait_period();
 
@@ -206,6 +219,20 @@ static void * actuator_loop(void * par) {
 	return 0;
 }
 
+static void * watchdog(void * par) {
+
+	unsigned long WCET = 10000000000;
+
+	rt_receive(control_Task2, &heartbeat);
+
+	while (keep_on_running){
+		if (heartbeat>WCET || 2*WCET<=heartbeat)
+		printk ("Errore! WCET 2 troppo alto\n");
+	}
+	return 0;	
+}
+
+
 int main(void)
 {
 	printf("The controller 2 is STARTED!\n");
@@ -235,10 +262,11 @@ int main(void)
 	pthread_create(&filter_thread2, NULL, filter_loop, NULL);
 	pthread_create(&control_thread2, NULL, control_loop, NULL);
 	pthread_create(&write_thread2, NULL, actuator_loop, NULL);
+	pthread_create(&watchdog_thread2, NULL, watchdog, NULL);
 
 	while (keep_on_running) {
-		//printf("Control: %d\tStato1: %d\tStato2: %d\n",(actuator[1]), stato_1, stato_2);
-		printf("Control: %d\n", (actuator[1]));
+		//printf("Control 2: %d\tState 1: %d\tState 2: %d\n",(actuator[1]), state_1, state_2);
+		printf("Control 2: %d\t \t Watchdog time 2 in nanoseconds: %d\n", (actuator[1]),heartbeat);
 		rt_sleep(500000000);
 	}
 
