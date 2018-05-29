@@ -1,4 +1,9 @@
-//------------------- CONTROLLER_1.C ---------------------- 
+//------------------- CONTROLLER1.C ---------------------- 
+//Questo task simula il controller sulla prima ruota
+//Ci permette inoltre di attivare l'ABS in caso di frenata
+//--------------------------------------------------------------
+//Davide Monsurrocco,Antonio della Ragione,Antonio Scotto di Fasano
+//---------------------------------------------------------------
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,7 +21,6 @@
 #include "parameters.h"
 #include <linux/kernel.h>
 #include <linux/errno.h>
-
 #define CPUMAP 0x1
 
 static int state_1 = 0;
@@ -145,21 +149,21 @@ static void * control_loop(void * par) {
 		// receiving the average plant state from the filter
 		rt_receive(filter_Task1, &plant_state);
 
+		// prendo il tempo di inizio del task
 		ti = rt_get_cpu_time_ns();
 		
 		if(*reference == 0){
-			// rilevazione del bloccaggio
+			// se invio 0 come velocità allora attivo il bloccaggio
 			if((plant_state == prev_plant_state) && (plant_state != 0)){
 				state_1 = 1;
 			} else state_1 = 0;
 			
+			// mailbox che ci permette di inviare e ricevere lo stato di bloccaggio di entrambe le ruote
 			rt_mbx_send_if(msg_1, (void *)&state_1, sizeof(int));
 		
 			rt_mbx_receive_timed(msg_2, (void *)&state_2, sizeof(int), delay);
 			
-			//printf("stato 1: %d\tstato 2: %d\n", state_1, state_2);
-			
-			// se una delle due ruote è bloccata, mollo il freno su entrambe
+			// lascio il freno su entrambe se rilevo una situazione di bloccaggio su una delle due ruote
 			if((state_1 == 1) || (state_2 == 1) || (plant_state == 0)) control_action = 3;
 			else control_action = 4;
 		} else{
@@ -177,8 +181,10 @@ static void * control_loop(void * par) {
 		// sending the control action to the actuator
 		rt_send(write_Task1, control_action);
 
+		// prendo il tempo di fine del task
 		now = rt_get_cpu_time_ns();
 		
+		//mi calcolo il tempo di calcolo totale del task
 		heartbeat = now-ti;
 
 		rt_send (watchdog_Task1,heartbeat);
@@ -230,11 +236,14 @@ static void * watchdog(void * par) {
 
 	unsigned long WCET = 10000000000;
 
+	rt_make_hard_real_time();
+
+	// ricevo il tempo di calcolo del task
 	rt_receive(control_Task1, &heartbeat);
 
 	while (keep_on_running){
 		if (heartbeat>WCET || 2*WCET<=heartbeat)
-		printk ("Errore! WCET 1 troppo alto\n");
+		rt_printk ("Errore! WCET 1 troppo alto\n");
 	}
 	return 0;	
 }
@@ -272,7 +281,7 @@ int main(void)
 
 	while (keep_on_running) {
 		//printf("Control 1: %d\tState 1: %d\tState 2: %d\n",(actuator[0]), state_1, state_2);
-		printf("Control 1: %d\t \t Watchdog time 1 in nanoseconds: %d\n", (actuator[0]),heartbeat);
+		printf("Control 1: %d\t \t Heartbeat time 1 in ns: %d\n", (actuator[0]),heartbeat);
 		rt_sleep(500000000);
 	}
 

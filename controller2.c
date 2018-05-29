@@ -1,4 +1,9 @@
-//------------------- CONTROLLER_2.C ---------------------- 
+//------------------- CONTROLLER2.C ---------------------- 
+//Questo task simula il controller sulla seconda ruota
+//Ci permette inoltre di attivare l'ABS in caso di frenata
+//--------------------------------------------------------------
+//Davide Monsurrocco,Antonio della Ragione,Antonio Scotto di Fasano
+//---------------------------------------------------------------
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -140,21 +145,21 @@ static void * control_loop(void * par) {
 		// receiving the average plant state from the filter
 		rt_receive(filter_Task2, &plant_state);
 
+		// prendo il tempo di inizio del task
 		ti = rt_get_cpu_time_ns();
 		
 		if(*reference == 0){
-			// rilevazione del bloccaggio
+			// se invio 0 come velocità allora attivo il bloccaggio
 			if((plant_state == prev_plant_state) && (plant_state != 0)){
 				state_2 = 1;
 			} else state_2 = 0;
 			
+			// mailbox che ci permette di inviare e ricevere lo stato di bloccaggio di entrambe le ruote
 			rt_mbx_receive_timed(msg_1, (void *)&state_1, sizeof(int), delay);
 			
 			rt_mbx_send_if(msg_2, (void *)&state_2, sizeof(int));
 			
-			//printf("stato1: %d\tstato2: %d\n", state_1, state_2);
-			
-			// se una delle due ruote è bloccata, mollo il freno su entrambe
+			// lascio il freno su entrambe se rilevo una situazione di bloccaggio su una delle due ruote
 			if((state_1 == 1) || (state_2 == 1) || (plant_state == 0)) control_action = 3;
 			else control_action = 4;
 		} else{
@@ -172,8 +177,10 @@ static void * control_loop(void * par) {
 		// sending the control action to the actuator
 		rt_send(write_Task2, control_action);
 
+		// prendo il tempo di fine del task
 		now = rt_get_cpu_time_ns();
 		
+		//mi calcolo il tempo di calcolo totale del task
 		heartbeat = now-ti;
 
 		rt_send (watchdog_Task2,heartbeat);
@@ -223,11 +230,14 @@ static void * watchdog(void * par) {
 
 	unsigned long WCET = 10000000000;
 
+	rt_make_hard_real_time();
+
+	// ricevo il tempo di calcolo del task
 	rt_receive(control_Task2, &heartbeat);
 
 	while (keep_on_running){
 		if (heartbeat>WCET || 2*WCET<=heartbeat)
-		printk ("Errore! WCET 2 troppo alto\n");
+		rt_printk ("Errore! WCET 2 troppo alto\n");
 	}
 	return 0;	
 }
@@ -266,7 +276,7 @@ int main(void)
 
 	while (keep_on_running) {
 		//printf("Control 2: %d\tState 1: %d\tState 2: %d\n",(actuator[1]), state_1, state_2);
-		printf("Control 2: %d\t \t Watchdog time 2 in nanoseconds: %d\n", (actuator[1]),heartbeat);
+		printf("Control 2: %d\t \t Heartbeat time 2 in ns: %d\n", (actuator[1]),heartbeat);
 		rt_sleep(500000000);
 	}
 
