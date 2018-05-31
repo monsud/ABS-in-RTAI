@@ -228,7 +228,7 @@ static void * actuator_loop(void * par) {
 
 static void * watchdog(void * par) {
 
-	unsigned long WCET = 10000000000;
+	unsigned long WCET = 1000000000*3612; //WCET 2 calcolato tramite stima
 
 	rt_make_hard_real_time();
 
